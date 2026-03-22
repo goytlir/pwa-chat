@@ -613,6 +613,7 @@ if ('serviceWorker' in navigator) {
 // Voice input
 let recognition = null;
 let isRecording = false;
+let voiceText = '';
 
 function initVoice() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -620,33 +621,29 @@ function initVoice() {
   
   const rec = new SpeechRecognition();
   rec.lang = 'zh-CN';
-  rec.continuous = true;
+  rec.continuous = false;
   rec.interimResults = true;
-  
-  let finalTranscript = '';
+  rec.maxAlternatives = 1;
   
   rec.onresult = (e) => {
-    let interim = '';
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      if (e.results[i].isFinal) {
-        finalTranscript += e.results[i][0].transcript;
-      } else {
-        interim += e.results[i][0].transcript;
-      }
+    let transcript = '';
+    for (let i = 0; i < e.results.length; i++) {
+      transcript += e.results[i][0].transcript;
     }
     const input = document.getElementById('input');
-    input.value = finalTranscript + interim;
+    input.value = (voiceText + ' ' + transcript).trim();
     autoResize(input);
     toggleSendBtn();
+    document.getElementById('voiceHint').textContent = '识别中: ' + transcript;
   };
   
   rec.onend = () => {
     if (isRecording) {
-      // Auto-stop after silence, send if there's content
       const input = document.getElementById('input');
       if (input.value.trim()) {
-        stopVoice();
-        send();
+        voiceText = input.value;
+        // Restart for continuous listening
+        try { recognition.start(); } catch(e) { stopVoice(); }
       } else {
         stopVoice();
       }
@@ -655,10 +652,16 @@ function initVoice() {
   
   rec.onerror = (e) => {
     console.log('Voice error:', e.error);
-    stopVoice();
     if (e.error === 'not-allowed') {
       document.getElementById('voiceHint').textContent = '请允许麦克风权限';
-      setTimeout(() => document.getElementById('voiceHint').classList.remove('show'), 2000);
+      setTimeout(() => document.getElementById('voiceHint').classList.remove('show'), 3000);
+    } else if (e.error === 'no-speech') {
+      // No speech detected, restart if still recording
+      if (isRecording) {
+        try { recognition.start(); } catch(e) { stopVoice(); }
+      }
+    } else {
+      stopVoice();
     }
   };
   
@@ -678,22 +681,28 @@ function startVoice() {
   if (!recognition) {
     document.getElementById('voiceHint').textContent = '你的浏览器不支持语音输入';
     document.getElementById('voiceHint').classList.add('show');
-    setTimeout(() => document.getElementById('voiceHint').classList.remove('show'), 2000);
+    setTimeout(() => document.getElementById('voiceHint').classList.remove('show'), 3000);
     return;
   }
   
+  voiceText = document.getElementById('input').value;
   isRecording = true;
   document.getElementById('micBtn').classList.add('recording');
   document.getElementById('voiceHint').textContent = '正在聆听...';
   document.getElementById('voiceHint').classList.add('show');
   document.getElementById('statusText').textContent = '🎤 聆听中...';
   
-  recognition.start();
+  try {
+    recognition.start();
+  } catch(e) {
+    stopVoice();
+  }
 }
 
 function stopVoice() {
   isRecording = false;
-  if (recognition) recognition.stop();
+  voiceText = '';
+  try { if (recognition) recognition.stop(); } catch(e) {}
   document.getElementById('micBtn').classList.remove('recording');
   document.getElementById('voiceHint').classList.remove('show');
   document.getElementById('statusText').textContent = '在线 · 随时待命';
