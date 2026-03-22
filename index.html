@@ -610,143 +610,15 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
 
-// Voice input
-let recognition = null;
-let isRecording = false;
-let voiceText = '';
-let voiceDebug = [];
-
-function voiceLog(msg) {
-  voiceDebug.push(msg);
-  console.log('[Voice]', msg);
-  const hint = document.getElementById('voiceHint');
-  hint.textContent = msg;
-  hint.classList.add('show');
-}
-
-function initVoice() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  voiceLog('检测语音API: ' + (SR ? '支持' : '不支持'));
-  if (!SR) return null;
-  
-  const rec = new SR();
-  rec.lang = 'zh-CN';
-  rec.continuous = false;
-  rec.interimResults = true;
-  rec.maxAlternatives = 1;
-  
-  voiceLog('语音API已初始化');
-  
-  rec.onstart = () => {
-    voiceLog('🎤 录音已开始，请说话...');
-  };
-  
-  rec.onresult = (e) => {
-    let transcript = '';
-    let isFinal = false;
-    for (let i = 0; i < e.results.length; i++) {
-      transcript += e.results[i][0].transcript;
-      if (e.results[i].isFinal) isFinal = true;
-    }
-    const input = document.getElementById('input');
-    input.value = (voiceText + ' ' + transcript).trim();
-    autoResize(input);
-    toggleSendBtn();
-    voiceLog('识别到: ' + transcript + (isFinal ? ' ✓' : ' ...'));
-  };
-  
-  rec.onend = () => {
-    voiceLog('录音结束 (isRecording=' + isRecording + ')');
-    if (isRecording) {
-      const input = document.getElementById('input');
-      if (input.value.trim()) {
-        voiceText = input.value;
-        voiceLog('继续聆听...');
-        setTimeout(() => {
-          try { recognition.start(); } catch(e) { voiceLog('重启失败: ' + e.message); stopVoice(); }
-        }, 300);
-      } else {
-        voiceLog('未检测到语音，再试一次...');
-        setTimeout(() => {
-          try { recognition.start(); } catch(e) { voiceLog('重启失败: ' + e.message); stopVoice(); }
-        }, 300);
-      }
-    }
-  };
-  
-  rec.onerror = (e) => {
-    voiceLog('错误: ' + e.error);
-    if (e.error === 'not-allowed') {
-      voiceLog('❌ 请允许麦克风权限后重试');
-      stopVoice();
-    } else if (e.error === 'no-speech') {
-      if (isRecording) {
-        setTimeout(() => {
-          try { recognition.start(); } catch(e2) { stopVoice(); }
-        }, 300);
-      }
-    } else if (e.error === 'audio-capture') {
-      voiceLog('❌ 找不到麦克风');
-      stopVoice();
-    } else {
-      stopVoice();
-    }
-  };
-  
-  return rec;
-}
-
+// Voice input - trigger keyboard voice
 function toggleVoice() {
-  if (isRecording) {
-    stopVoice();
-  } else {
-    startVoice();
-  }
-}
-
-function startVoice() {
-  voiceDebug = [];
-  
-  // 先请求麦克风权限
-  voiceLog('正在请求麦克风权限...');
-  
-  navigator.mediaDevices.getUserMedia({ audio: true })
-    .then(stream => {
-      // 拿到权限后立即释放
-      stream.getTracks().forEach(t => t.stop());
-      voiceLog('麦克风权限已获取 ✓');
-      
-      if (!recognition) recognition = initVoice();
-      if (!recognition) {
-        voiceLog('❌ 浏览器不支持语音输入');
-        return;
-      }
-      
-      voiceText = document.getElementById('input').value;
-      isRecording = true;
-      document.getElementById('micBtn').classList.add('recording');
-      document.getElementById('statusText').textContent = '🎤 聆听中...';
-      
-      try {
-        recognition.start();
-      } catch(e) {
-        voiceLog('启动失败: ' + e.message);
-        stopVoice();
-      }
-    })
-    .catch(err => {
-      voiceLog('❌ 麦克风权限被拒绝: ' + err.message);
-      stopVoice();
-    });
-}
-
-function stopVoice() {
-  isRecording = false;
-  voiceText = '';
-  try { if (recognition) recognition.stop(); } catch(e) {}
-  document.getElementById('micBtn').classList.remove('recording');
-  document.getElementById('voiceHint').classList.remove('show');
-  document.getElementById('statusText').textContent = '在线 · 随时待命';
+  const input = document.getElementById('input');
+  input.focus();
+  // Show hint to use keyboard mic
+  const hint = document.getElementById('voiceHint');
+  hint.textContent = '👆 请点击键盘上的 🎤 按钮进行语音输入';
+  hint.classList.add('show');
+  setTimeout(() => hint.classList.remove('show'), 4000);
 }
 </script>
 </body>
