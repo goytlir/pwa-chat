@@ -706,23 +706,38 @@ function toggleVoice() {
 
 function startVoice() {
   voiceDebug = [];
-  if (!recognition) recognition = initVoice();
-  if (!recognition) {
-    voiceLog('❌ 浏览器不支持语音输入，请用Chrome');
-    return;
-  }
   
-  voiceText = document.getElementById('input').value;
-  isRecording = true;
-  document.getElementById('micBtn').classList.add('recording');
-  document.getElementById('statusText').textContent = '🎤 聆听中...';
+  // 先请求麦克风权限
+  voiceLog('正在请求麦克风权限...');
   
-  try {
-    recognition.start();
-  } catch(e) {
-    voiceLog('启动失败: ' + e.message);
-    stopVoice();
-  }
+  navigator.mediaDevices.getUserMedia({ audio: true })
+    .then(stream => {
+      // 拿到权限后立即释放
+      stream.getTracks().forEach(t => t.stop());
+      voiceLog('麦克风权限已获取 ✓');
+      
+      if (!recognition) recognition = initVoice();
+      if (!recognition) {
+        voiceLog('❌ 浏览器不支持语音输入');
+        return;
+      }
+      
+      voiceText = document.getElementById('input').value;
+      isRecording = true;
+      document.getElementById('micBtn').classList.add('recording');
+      document.getElementById('statusText').textContent = '🎤 聆听中...';
+      
+      try {
+        recognition.start();
+      } catch(e) {
+        voiceLog('启动失败: ' + e.message);
+        stopVoice();
+      }
+    })
+    .catch(err => {
+      voiceLog('❌ 麦克风权限被拒绝: ' + err.message);
+      stopVoice();
+    });
 }
 
 function stopVoice() {
