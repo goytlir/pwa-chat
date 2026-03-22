@@ -243,6 +243,51 @@ body {
 .send-btn.active { opacity: 1; }
 .send-btn:active { transform: scale(0.9); }
 
+/* Mic button */
+.mic-btn {
+  width: 42px; height: 42px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: var(--text-dim);
+  font-size: 18px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.mic-btn:active { transform: scale(0.9); }
+
+.mic-btn.recording {
+  background: #ef4444;
+  border-color: #ef4444;
+  color: #fff;
+  animation: micPulse 1.2s infinite;
+}
+
+@keyframes micPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+  50% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+}
+
+/* Voice hint */
+.voice-hint {
+  display: none;
+  text-align: center;
+  padding: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+  animation: fadeIn 0.3s ease;
+}
+
+.voice-hint.show { display: block; }
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 /* Settings panel */
 .settings-overlay {
   display: none;
@@ -356,8 +401,10 @@ body {
   <textarea id="input" rows="1" placeholder="说点什么..." 
     oninput="autoResize(this); toggleSendBtn()" 
     onkeydown="handleKey(event)"></textarea>
+  <button class="mic-btn" id="micBtn" onclick="toggleVoice()">🎤</button>
   <button class="send-btn" id="sendBtn" onclick="send()">➤</button>
 </div>
+<div class="voice-hint" id="voiceHint">正在聆听...</div>
 
 <!-- Settings -->
 <div class="settings-overlay" id="settingsOverlay" onclick="closeSettings(event)">
@@ -561,6 +608,95 @@ function installPWA() {
 // Register SW
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+
+// Voice input
+let recognition = null;
+let isRecording = false;
+
+function initVoice() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) return null;
+  
+  const rec = new SpeechRecognition();
+  rec.lang = 'zh-CN';
+  rec.continuous = true;
+  rec.interimResults = true;
+  
+  let finalTranscript = '';
+  
+  rec.onresult = (e) => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) {
+        finalTranscript += e.results[i][0].transcript;
+      } else {
+        interim += e.results[i][0].transcript;
+      }
+    }
+    const input = document.getElementById('input');
+    input.value = finalTranscript + interim;
+    autoResize(input);
+    toggleSendBtn();
+  };
+  
+  rec.onend = () => {
+    if (isRecording) {
+      // Auto-stop after silence, send if there's content
+      const input = document.getElementById('input');
+      if (input.value.trim()) {
+        stopVoice();
+        send();
+      } else {
+        stopVoice();
+      }
+    }
+  };
+  
+  rec.onerror = (e) => {
+    console.log('Voice error:', e.error);
+    stopVoice();
+    if (e.error === 'not-allowed') {
+      document.getElementById('voiceHint').textContent = '请允许麦克风权限';
+      setTimeout(() => document.getElementById('voiceHint').classList.remove('show'), 2000);
+    }
+  };
+  
+  return rec;
+}
+
+function toggleVoice() {
+  if (isRecording) {
+    stopVoice();
+  } else {
+    startVoice();
+  }
+}
+
+function startVoice() {
+  if (!recognition) recognition = initVoice();
+  if (!recognition) {
+    document.getElementById('voiceHint').textContent = '你的浏览器不支持语音输入';
+    document.getElementById('voiceHint').classList.add('show');
+    setTimeout(() => document.getElementById('voiceHint').classList.remove('show'), 2000);
+    return;
+  }
+  
+  isRecording = true;
+  document.getElementById('micBtn').classList.add('recording');
+  document.getElementById('voiceHint').textContent = '正在聆听...';
+  document.getElementById('voiceHint').classList.add('show');
+  document.getElementById('statusText').textContent = '🎤 聆听中...';
+  
+  recognition.start();
+}
+
+function stopVoice() {
+  isRecording = false;
+  if (recognition) recognition.stop();
+  document.getElementById('micBtn').classList.remove('recording');
+  document.getElementById('voiceHint').classList.remove('show');
+  document.getElementById('statusText').textContent = '在线 · 随时待命';
 }
 </script>
 </body>
